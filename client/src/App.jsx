@@ -152,7 +152,7 @@ function App() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-800">
-                Graph RAG Chat
+                GraphMind
               </h1>
               <p className="text-sm text-gray-500">
                 User ID: <span className="font-mono font-medium">{userId}</span>
@@ -219,7 +219,7 @@ function App() {
                       <FaComments className="text-indigo-400 text-2xl" />
                     </div>
                     <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                      Welcome to Graph RAG Chat
+                      Welcome to GraphMind
                     </h3>
                     <p className="text-gray-500 max-w-md">
                       Start a conversation with the AI assistant. Your
