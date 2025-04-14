@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { neo4j } = require('neo4j-driver');
+const neo4j = require('neo4j-driver');
 const axios = require('axios');
 
 const app = express();
@@ -167,6 +167,134 @@ app.get('/api/history/:userId', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     await session.close();
+  }
+});
+
+// Get conversation graph data
+app.get('/api/graph/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const session = driver.session();
+  
+  try {
+    const result = await session.run(`
+      MATCH (u:User {id: $userId})-[:SENT|:RECEIVED]->(m:Message)
+      OPTIONAL MATCH (m)-[r:RELATED_TO]->(t:Topic)
+      RETURN u, m, r, t
+    `, { userId });
+
+    const nodes = [];
+    const links = [];
+
+    result.records.forEach(record => {
+      // Add user node
+      const user = record.get('u');
+      if (!nodes.find(n => n.id === user.identity.low)) {
+        nodes.push({
+          id: user.identity.low,
+          label: 'User',
+          name: user.properties.id,
+          type: 'user'
+        });
+      }
+
+      // Add message node
+      const message = record.get('m');
+      if (!nodes.find(n => n.id === message.identity.low)) {
+        nodes.push({
+          id: message.identity.low,
+          label: message.properties.text.substring(0, 15) + '...',
+          name: message.properties.text,
+          type: message.properties.isUser ? 'userMessage' : 'aiMessage',
+          timestamp: message.properties.timestamp
+        });
+      }
+
+      // Add relationship between user and message
+      links.push({
+        source: user.identity.low,
+        target: message.identity.low,
+        type: 'sent'
+      });
+
+      // Add topic if exists
+      const topic = record.get('t');
+      if (topic) {
+        if (!nodes.find(n => n.id === topic.identity.low)) {
+          nodes.push({
+            id: topic.identity.low,
+            label: topic.properties.name,
+            type: 'topic'
+          });
+        }
+        
+        // Add relationship between message and topic
+        const relation = record.get('r');
+        links.push({
+          source: message.identity.low,
+          target: topic.identity.low,
+          type: 'about'
+        });
+      }
+    });
+
+    res.json({ nodes, links });
+  } catch (error) {
+    console.error('Graph error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    await session.close();
+  }
+});
+
+// Topic extraction endpoint
+app.post('/api/extract-topics', async (req, res) => {
+  const { messageId, text } = req.body;
+  
+  try {
+    // Use OpenAI to extract topics
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-3.5-turbo',
+        messages: [{
+          role: 'system',
+          content: 'Extract important topics/entities from this text. Return as comma-separated values.'
+        }, {
+          role: 'user',
+          content: text
+        }],
+        temperature: 0.3
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        }
+      }
+    );
+
+    const topics = response.data.choices[0].message.content
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
+    // Store topics in Neo4j
+    const session = driver.session();
+    try {
+      for (const topic of topics) {
+        await session.run(`
+          MATCH (m:Message {id: $messageId})
+          MERGE (t:Topic {name: $topic})
+          MERGE (m)-[:RELATED_TO]->(t)
+        `, { messageId, topic });
+      }
+    } finally {
+      await session.close();
+    }
+
+    res.json({ topics });
+  } catch (error) {
+    console.error('Topic extraction error:', error);
+    res.status(500).json({ error: 'Failed to extract topics' });
   }
 });
 
