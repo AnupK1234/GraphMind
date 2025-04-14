@@ -103,6 +103,10 @@ async function getConversationContext(userId) {
 }
 
 // API Endpoints
+app.get("/test", async (req, res) => {
+  res.send("WORKING")
+})
+
 app.post("/api/chat", async (req, res) => {
   const { userId, message } = req.body;
 
