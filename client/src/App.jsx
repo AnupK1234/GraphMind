@@ -2,13 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { format } from "date-fns";
 import "./App.css";
-import {
-  FaChartBar,
-  FaComments,
-  FaProjectDiagram,
-  FaPaperPlane,
-} from "react-icons/fa";
+import { FaComments, FaProjectDiagram, FaPaperPlane } from "react-icons/fa";
 import GraphView from "./GraphView";
+import RecommendationsPanel from "./RecommendationsPanel";
 
 function App() {
   const [userId] = useState(`user_${Math.random().toString(36).substr(2, 9)}`);
@@ -18,6 +14,8 @@ function App() {
   const messagesEndRef = useRef(null);
   const [graphData, setGraphData] = useState(null);
   const [showGraph, setShowGraph] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [lastMessageId, setLastMessageId] = useState(null);
 
   useEffect(() => {
     // Load chat history
@@ -86,6 +84,14 @@ function App() {
       };
 
       setMessages((prev) => [...prev, aiMessage]);
+      setLastMessageId(userMessage.id);
+
+      // Mark previous message as answered
+      if (lastMessageId) {
+        await axios.post(`${import.meta.env.VITE_API_URL}/api/mark-answered`, {
+          messageId: lastMessageId,
+        });
+      }
 
       // Extract topics from AI response
       await axios.post(`${import.meta.env.VITE_API_URL}/api/extract-topics`, {
@@ -252,6 +258,18 @@ function App() {
                 )}
               </div>
 
+              {showRecommendations && (
+                <div className="border-t border-gray-200 bg-white">
+                  <RecommendationsPanel
+                    userId={userId}
+                    onSelect={(rec) => {
+                      setMessage(rec);
+                      setShowRecommendations(false);
+                    }}
+                  />
+                </div>
+              )}
+
               {/* Message Input Form */}
               <div className="border-t border-gray-200 p-4 bg-gray-50">
                 <form onSubmit={handleSubmit} className="flex space-x-3">
@@ -283,6 +301,31 @@ function App() {
                         <FaPaperPlane className="ml-2 text-sm" />
                       </div>
                     )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowRecommendations(!showRecommendations)}
+                    className={`rounded-lg px-3 flex items-center justify-center border focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all ${
+                      showRecommendations
+                        ? "bg-indigo-100 text-indigo-700 border-indigo-300"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    }`}
+                    title="Show recommendations"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                      />
+                    </svg>
                   </button>
                 </form>
               </div>
